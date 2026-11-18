@@ -168,12 +168,21 @@ const SEG=8,R=13,WB=44,GRAV=560,ACC=330,MAXV=300,PXM=40,DT=1/240;
 let L=LEVELS[0],LV=0,T=null;
 function genTerrain(n){
   const rng=mulberry(n*9973+17),d=n/9;
-  const len=9000+n*1500,N=Math.ceil((len+1400)/SEG);
-  const h=new Float32Array(N);let i=0,y=0;const pits=[];
+  const len=(9000+n*1500)*2,N=Math.ceil((len+3400)/SEG);
+  const h=new Float32Array(N);let i=0,y=0;const pits=[],haz=[];let nextH=1900+rng()*600;
   const push=v=>{if(i<N){h[i++]=v;y=v}};
   const seg=(dx,fn)=>{const m=Math.max(1,Math.round(dx/SEG)),y0=y;for(let k=1;k<=m;k++)push(y0+fn(k/m))};
   push(0);seg(360,t=>0);
   while(i*SEG<len){
+    if(i*SEG>=nextH){
+      // control hazards: a steep plunge (lean back / brake) or a drop-off cliff (lean back, land level).
+      // Pedalling alone crashes on both (checked by tools/test_levels.js), so every level needs lean/brake.
+      seg(320,t=>0);const hx0=i*SEG,y0=y;
+      if(n>=2&&rng()<.4+d*.25){const wd=30+rng()*30,dr=210+rng()*70+d*40;seg(40,t=>0);seg(wd,t=>t*dr);seg(240,t=>0)}
+      else{const a=170+rng()*90,sl=1.35+rng()*.3+d*.15;seg(a,t=>sl*a*t);seg(260,t=>0)}
+      const drop=y-y0;if(drop>0){const cl=.26;seg(drop*.75/cl+60,t=>-cl*(drop*.75/cl+60)*t*.9);seg(200,t=>0)}
+      haz.push({x0:hx0-150,x1:i*SEG});nextH=i*SEG+2300+rng()*1500;continue;
+    }
     const r=rng();
     if(r<.28){const Lh=260+rng()*360,A=(14+d*34)*(rng()<.6?1:-.7),s=(.05+rng()*.12)*(rng()<.8?1:-.5);
       seg(Lh,t=>s*Lh*t-A*Math.sin(Math.PI*t)+2.5*Math.sin(t*Lh/21))}
@@ -191,8 +200,8 @@ function genTerrain(n){
   const finish=i*SEG+260;seg(1300,t=>0);
   while(i<N)h[i]=h[i-1],i++;
   const cps=[0];
-  for(let x=1500;x<finish-500;x+=1400){let cx=x;for(let k=0;k<6;k++){if(pits.some(p=>cx>p.x0-650&&cx<p.x1+120))cx+=200;}cps.push(cx)}
-  return{h,N,len,finish,pits,cps};
+  for(let x=1500;x<finish-500;x+=1400){let cx=x;for(let k=0;k<6;k++){if(pits.some(p=>cx>p.x0-650&&cx<p.x1+120)||haz.some(q=>cx>q.x0-100&&cx<q.x1+80))cx+=200;}cps.push(cx)}
+  return{h,N,len,finish,pits,haz,cps};
 }
 function Hx(x){const f=x/SEG;let i=Math.floor(f);if(i<0)return T.h[0];if(i>=T.N-1)return T.h[T.N-1];return T.h[i]+(T.h[i+1]-T.h[i])*(f-i)}
 
@@ -349,9 +358,12 @@ function collide(p,isB,b){
   return impact;
 }
 // suspension: wheelbase rigid, rider/frame mass hangs on two spring-dampers (rear shock, fork)
-const SK=650,SC=32,STRAVEL=5,SEXT=3;
+let SK=170,SCC=11,SCR=24,STRAVEL=22,SEXT=4,SPROG=5;
 function springs(b){const p=b.p;for(let k=1;k<3;k++){const[a,c,len]=b.cons[k],A=p[a],B=p[c],dx=B.x-A.x,dy=B.y-A.y,d=Math.hypot(dx,dy)||1e-6,nx=dx/d,ny=dy/d;
-  const vr=((B.x-B.px)-(A.x-A.px))*nx+((B.y-B.py)-(A.y-A.py))*ny;const f=(-SK*(d-len)-SC*vr/DT)*DT*DT,wa=A.im/(A.im+B.im),wb=1-wa;
+  const vr=((B.x-B.px)-(A.x-A.px))*nx+((B.y-B.py)-(A.y-A.py))*ny;
+  // progressive spring (ramps up near the end of travel = soft bump-stop) + lighter damping on compression than on rebound
+  const x=len-d,u=x>0?Math.min(1.2,x/STRAVEL):0,kp=1+SPROG*u*u*u;
+  const f=(-SK*kp*(d-len)-(vr<0?SCC:SCR)*vr/DT)*DT*DT,wa=A.im/(A.im+B.im),wb=1-wa;
   A.x-=nx*f*wa;A.y-=ny*f*wa;B.x+=nx*f*wb;B.y+=ny*f*wb}}
 function solve(b){const p=b.p;for(let k=0;k<3;k++){const[a,c,len]=b.cons[k],A=p[a],B=p[c],dx=B.x-A.x,dy=B.y-A.y,d=Math.hypot(dx,dy)||1e-6;
   let tgt=len;if(k){if(d<len-STRAVEL)tgt=len-STRAVEL;else if(d>len+SEXT)tgt=len+SEXT;else continue}
@@ -378,7 +390,7 @@ function physStep(){
   const a=Math.atan2(p[1].y-p[0].y,p[1].x-p[0].x);let da=a-b.lastA;if(da>Math.PI)da-=2*Math.PI;if(da<-Math.PI)da+=2*Math.PI;b.lastA=a;
   for(let k=0;k<2;k++){if(!b.contact[k])b.spin[k]*=.9995;b.ang[k]+=b.spin[k]}
   if(!now){b.air+=DT;b.airRot+=da}
-  else{if(!was&&b.air>.28){const imp=Math.max(c0||0,c1||0);AU.thud(Math.min(1,imp/500));
+  else{if(!was&&b.air>.28){const imp=Math.max(c0||0,c1||0);AU.thud(Math.min(1,imp/500));landFx(imp,p);
       const fl=Math.floor((Math.abs(b.airRot)+.6)/(Math.PI*2));if(fl>0&&game.alive){game.flips+=fl;AU.ding(fl);toast(fl>1?`Salto ×${fl}!`:'Salto!',b.airRot<0?'para':'prapa')}}
     b.air=0;b.airRot=0}
   if(game.alive){
@@ -389,9 +401,17 @@ function physStep(){
   }
 }
 
+/* ================= landing feedback ================= */
+function landFx(imp,p){
+  if(imp<120)return;
+  cam.kv+=Math.min(95,imp*.2);               // camera dips, then springs back
+  const n=Math.min(34,Math.round(imp/14));
+  for(let k=0;k<n&&dirt.length<220;k++){const w=p[k&1];dirt.push({x:w.x+(Math.random()-.5)*10,y:Hx(w.x)-1,vx:(Math.random()-.5)*130+(w.x-w.px)/DT*.15,vy:-20-Math.random()*Math.min(120,imp*.25),life:.4+Math.random()*.6,s:.7+Math.random()*1.5})}
+}
+
 /* ================= game state ================= */
 let state='menu',game={time:0,flips:0,crashes:0,cp:0,alive:true,crashT:0,won:false,wonT:0};
-const cam={x:0,y:0,ys:0,px:0,py:0};
+const cam={x:0,y:0,ys:0,px:0,py:0,k:0,kv:0};
 function loadLevel(n){
   LV=n;L=LEVELS[n];T=genTerrain(n);buildDecor();buildLayers();initWeather();AU.setEnv();
 }
@@ -457,7 +477,7 @@ function drawWeather(dt,t){
 }
 
 /* ================= main render ================= */
-function worldTf(){g.setTransform(DPR*ZOOM,0,0,DPR*ZOOM,DPR*(W*.5-cam.x*ZOOM),DPR*(H*.56-cam.y*ZOOM))}
+function worldTf(){g.setTransform(DPR*ZOOM,0,0,DPR*ZOOM,DPR*(W*.5-cam.x*ZOOM),DPR*(H*.56-(cam.y+cam.k)*ZOOM))}
 function render(t,dt){
   g.setTransform(DPR,0,0,DPR,0,0);
   drawSky(t);
@@ -517,8 +537,8 @@ function drawWheel(cx_,cy_,ang,col,hi){
 }
 function drawBike(b){
   const p=b.p,B=p[0],F=p[1];let ax=F.x-B.x,ay=F.y-B.y;const l=Math.hypot(ax,ay);ax/=l;ay/=l;const ux=ay,uy=-ax;
-  const comp=b.comp||0,cR=b.compR||0,cF=b.compF||0,dv=-comp*3;
-  const P=(u,v)=>[B.x+ax*u+ux*v,B.y+ay*u+uy*v];const PF=(u,v)=>P(u,v-(cR*(1-u/44)+cF*(u/44))*4.2);
+  const comp=b.comp||0,cR=b.compR||0,cF=b.compF||0,dv=-comp*1.5;
+  const P=(u,v)=>[B.x+ax*u+ux*v,B.y+ay*u+uy*v];const PF=(u,v)=>P(u,v-(cR*(1-u/44)+cF*(u/44))*3.4);
   const col=mix(L.gr,'#000000',.38),far=mix(col,L.fog,.16),hi=rgba(mix(L.fog,'#ffffff',.35),L.tm==='night'?.18:.3);
   g.lineCap='round';g.lineJoin='round';
   drawWheel(B.x,B.y,b.ang[0],col,hi);drawWheel(F.x,F.y,b.ang[1],col,hi);
@@ -527,9 +547,9 @@ function drawBike(b){
   const ca=b.crank,crank=a=>[BB[0]+(Math.cos(a)*ax-Math.sin(a)*ux)*6,BB[1]+(Math.cos(a)*ay-Math.sin(a)*uy)*6];
   const pedN=crank(ca),pedF=crank(ca+Math.PI);
   const bob=b.pedaling?Math.sin(ca*2)*.6:0;
-  const hip=PF(12.2-lv*5.5+fwdL*1.5,28.6-comp*3.2-fwdL*2.4+bob);
+  const hip=PF(12.2-lv*5.5+fwdL*1.5,28.6-comp*9.5-fwdL*2.4+bob);
   const hl=[(hip[0]-B.x)*ax+(hip[1]-B.y)*ay,(hip[0]-B.x)*ux+(hip[1]-B.y)*uy];
-  const ta=.64+lv*.28-fwdL*.12+comp*.08,sl=[hl[0]+Math.cos(ta)*17,hl[1]+Math.sin(ta)*17];
+  const ta=.64+lv*.28-fwdL*.12+comp*.2,sl=[hl[0]+Math.cos(ta)*17,hl[1]+Math.sin(ta)*17];
   const S=P(sl[0],sl[1]),na=ta+.62,Hc=P(sl[0]+Math.cos(na)*5.6,sl[1]+Math.sin(na)*5.6);
   const grip=PF(34.2,24.4);
   const fwd=k=>(k[0]-B.x)*ax+(k[1]-B.y)*ay,down=k=>-((k[0]-B.x)*ux+(k[1]-B.y)*uy);
@@ -667,7 +687,7 @@ const AU={ctx:null,on:SAVE.snd!==false,voices:[],acc:0,gust:0,cache:{},lp:{},wan
   thunder(dist){if(this.shot('thunder',1-dist*.45,Math.random()*1.2-.6,.85+Math.random()*.25,dist>.5?2500:0))return;const c=this.ctx,t=c.currentTime+.05,vol=.9*(1-dist*.6),dur=3+Math.random()*2;const b=this.burst(this.brown,'lowpass',700,t,dur,vol,false);
     b.gn.gain.setValueAtTime(0,t);b.gn.gain.linearRampToValueAtTime(vol,t+.06+dist*.3);for(let k=0;k<6;k++)b.gn.gain.setValueAtTime(vol*(.5+Math.random()*.6),t+.15+k*.12+Math.random()*.1);b.gn.gain.exponentialRampToValueAtTime(.0005,t+dur);
     b.fl.frequency.setValueAtTime(900-dist*500,t);b.fl.frequency.exponentialRampToValueAtTime(90,t+dur)},
-  thud(k){if(!this.ctx)return;const t=this.ctx.currentTime;this.burst(this.brown,'lowpass',260,t,.18,.3+k*.5);this.tone(110,45,t,.18,.12+k*.2,'sine')},
+  thud(k){if(!this.ctx)return;const t=this.ctx.currentTime;this.burst(this.brown,'lowpass',200+k*120,t,.3,.25+k*.45);this.tone(95,38,t,.3,.1+k*.22,'sine')},
   click(){this.burst(this.white,'highpass',3500,this.ctx.currentTime,.006,.05)},
   ding(n){if(!this.ctx)return;const t=this.ctx.currentTime;[784,988,1175,1568].slice(0,1+Math.min(3,n)).forEach((f,k)=>this.tone(f,f,t+k*.08,.25,.07,'triangle'))},
   checkpoint(){if(!this.ctx)return;const t=this.ctx.currentTime;this.tone(660,660,t,.18,.08,'triangle');this.tone(990,990,t+.12,.3,.08,'triangle')},
@@ -787,7 +807,7 @@ let last=performance.now(),acc=0,tt=0,hudCache='';
 function frame(now){
   requestAnimationFrame(frame);
   let dt=Math.min(.05,(now-last)/1000);last=now;tt+=dt;
-  cam.px=cam.x;cam.py=cam.y;
+  cam.px=cam.x;cam.py=cam.y;cam.kv+=(-140*cam.k-15*cam.kv)*dt;cam.k+=cam.kv*dt;
   if(toastT>0){toastT-=dt;if(toastT<=0)$('#toast').style.opacity=0}
   let speed=0,ground=false;
   if((state==='play'||state==='done')&&!paused){
