@@ -23,6 +23,9 @@ The game (HTML5) lives in `app/src/main/assets/game/` and runs inside a full-scr
 - **Build → Generate Signed App Bundle / APK** → krijo një keystore (ruaje mirë, pa të s'mund ta përditësosh app-in) → *release*.
 - Për Google Play përdor **.aab**; për ta instaluar direkt në telefon përdor **.apk**.
 
+## Testet
+`NODE_PATH=$(npm root -g) node tools/test_levels.js` — bot-i luan të 10 nivelet (me kontroll duhet t'i mbarojë; vetëm me pedal s'duhet t'i mbarojë asnjërin).
+
 ## Përditësimi i lojës
 Zëvendëso `app/src/main/assets/game/index.html` (dhe dosjen `sounds/`) me versionin e ri,
 rrite `versionCode` te `app/build.gradle.kts`, pastaj bëj build përsëri.

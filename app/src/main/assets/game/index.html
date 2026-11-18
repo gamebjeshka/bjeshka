@@ -146,14 +146,14 @@ const fmt=t=>{t=Math.max(0,t);const m=Math.floor(t/60),s=Math.floor(t%60);return
 const LEVELS=[
 {n:'Gërmia',p:'Prishtinë',tm:'day',w:'clear',sky:['#6aa6d6','#d6eaf2'],fog:'#a6c4ca',gr:'#14241b',land:'prishtina',birds:1,cuckoo:1,desc:'Ditë me diell, zogj në pyll'},
 {n:'Mirusha',p:'Malishevë',tm:'dawn',w:'fog',sky:['#e39a77','#fbe1c2'],fog:'#d6b3a2',gr:'#2a1e24',land:'waterfall',birds:1,cuckoo:.5,desc:'Agim me mjegull te ujëvarat'},
-{n:'Rugova',p:'Pejë',tm:'day',w:'rain',sky:['#5c707c','#9cadb5'],fog:'#869aa3',gr:'#16212a',land:'kulla',birds:.25,desc:'Shi në Grykën e Rugovës'},
+{n:'Rugova',p:'Pejë',tm:'day',w:'rain',sky:['#5c707c','#9cadb5'],fog:'#869aa3',gr:'#16212a',land:'rugova',birds:.25,desc:'Shi në Grykën e Rugovës'},
 {n:'Prizreni',p:'Kalaja',tm:'dusk',w:'clear',sky:['#2a2757','#f2894a'],fog:'#b4675a',gr:'#1f1018',land:'fortress',birds:.5,crickets:.6,desc:'Muzg mbi Kalanë e Prizrenit'},
 {n:'Bjeshkët e Nemuna',p:'Deçan',tm:'night',w:'clear',sky:['#030817','#17284a'],fog:'#1c304e',gr:'#03060d',land:'peaks',crickets:1,owl:1,flies:1,light:1,desc:'Natë me yje e karkaleca'},
 {n:'Brezovica',p:'Sharr',tm:'day',w:'snow',sky:['#9db1c5','#e2e9ef'],fog:'#c0cdd8',gr:'#212a33',land:'ski',snow:1,desc:'Borë në pistat e skijimit'},
 {n:'Drenica',p:'Skënderaj',tm:'eve',w:'rain',sky:['#2e5964','#5b8893'],fog:'#47727d',gr:'#0e1a20',land:'village',crickets:.5,desc:'Mbrëmje me shi në pyll'},
 {n:'Gjeravica',p:'2656 m',tm:'day',w:'storm',sky:['#333c48','#646f7b'],fog:'#56616c',gr:'#11161b',land:'peaks',desc:'Rrebesh me vetëtima'},
 {n:'Sharri',p:'Dragash',tm:'night',w:'blizzard',sky:['#0c1421','#293749'],fog:'#344458',gr:'#090e15',land:'peaks',snow:1,light:1,desc:'Stuhi bore natën'},
-{n:'Rugova natën',p:'Pejë',tm:'night',w:'storm',sky:['#04060b','#121a25'],fog:'#17212c',gr:'#020407',land:'kulla',owl:.5,light:1,desc:'Stuhi e madhe natën'},
+{n:'Rugova natën',p:'Pejë',tm:'night',w:'storm',sky:['#04060b','#121a25'],fog:'#17212c',gr:'#020407',land:'rugova',owl:.5,light:1,desc:'Stuhi e madhe natën'},
 ];
 
 /* ================= save ================= */
@@ -262,6 +262,69 @@ function albFlag(c,x,y,w){const h=w*.7;c.fillStyle='#e41e20';c.fillRect(x,y,w,h)
   c.beginPath();c.moveTo(cx_,cy_-4*s);c.lineTo(cx_-7*s,cy_-5*s);c.lineTo(cx_-3*s,cy_+1*s);c.lineTo(cx_-1.5*s,cy_+5*s);c.lineTo(cx_+1.5*s,cy_+5*s);c.lineTo(cx_+3*s,cy_+1*s);c.lineTo(cx_+7*s,cy_-5*s);c.closePath();c.fill();
   c.beginPath();c.arc(cx_-1.6*s,cy_-5*s,1.3*s,0,7);c.arc(cx_+1.6*s,cy_-5*s,1.3*s,0,7);c.fill()}
 
+/* ================= scenery primitives (rock walls, crags, hillside towns) ================= */
+// Sheer limestone wall made of blocks with lit/dark faces, vertical cracks, strata and pines on the ledges.
+function rockWall(c,Wt,base,hmin,hmax,r,o){
+  const step=o.step||44,n=Math.ceil(Wt/step),ys=[];
+  for(let k=0;k<n;k++)ys.push(hmin+(hmax-hmin)*Math.pow(r(),o.pw||1));
+  ys.push(ys[0]);
+  const top=[];
+  for(let k=0;k<n;k++){const x0=k*step,x1=Math.min(Wt,(k+1)*step),y=base-ys[k],ye=base-ys[k+1>=n?0:k+1];
+    top.push([x0,y]);top.push([x0+step*.3,y-r()*o.rough]);top.push([x0+step*.7,y-r()*o.rough*.6]);top.push([x1-.5,y+(ye-y)*.15])}
+  top.push([Wt,top[0][1]]);
+  const path=()=>{c.beginPath();c.moveTo(0,H);c.lineTo(0,top[0][1]);for(const q of top)c.lineTo(q[0],q[1]);c.lineTo(Wt,H);c.closePath()};
+  path();c.fill();
+  c.save();path();c.clip();
+  for(let k=0;k<n;k++){const x0=k*step,t=r();c.fillStyle=t<.38?o.lit:t<.78?o.dark:'rgba(0,0,0,0)';
+    // faces are slanted blocks, not plain stripes
+    const sk=(r()-.5)*step*.5;c.beginPath();c.moveTo(x0,0);c.lineTo(x0+step*(.55+r()*.45),0);c.lineTo(x0+step*(.55+r()*.45)+sk,H);c.lineTo(x0+sk,H);c.closePath();c.fill()}
+  c.strokeStyle=o.crack;c.lineWidth=Math.max(.7,H*.0022);
+  for(let k=0;k<n*2;k++){const x=r()*Wt,ty=base-hmax*(.2+r()*.8),ln=H*(.06+r()*.2);c.globalAlpha=.25+r()*.4;c.beginPath();c.moveTo(x,ty);c.lineTo(x+(r()-.5)*9,ty+ln*.5);c.lineTo(x+(r()-.5)*14,ty+ln);c.stroke()}
+  c.globalAlpha=.12;c.lineWidth=Math.max(.6,H*.0016);for(let k=0;k<26;k++){const y=base-hmax*(.1+r()*.9),x=r()*Wt,ln=step*(1+r()*3);c.beginPath();c.moveTo(x,y);c.lineTo(x+ln,y+(r()-.5)*4);c.stroke()}
+  c.globalAlpha=1;
+  if(o.shade){const gr=c.createLinearGradient(0,base-hmax,0,base);gr.addColorStop(0,'rgba(0,0,0,0)');gr.addColorStop(1,'rgba(0,0,0,.32)');c.fillStyle=gr;c.fillRect(0,0,Wt,H)}
+  if(o.pines){c.fillStyle=o.pineCol;for(let k=0;k<n*o.pines;k++){const x=r()*Wt,h=H*(.03+r()*.05),yb=base-hmax*(.05+r()*.8);if(yb>base-hmin*.5)continue;pine(c,x,yb,h,h*.45,mulberry(k*7+1))}}
+  if(o.cave){c.fillStyle='rgba(0,0,0,.28)';for(let k=0;k<4;k++){const x=r()*Wt,y=base-hmin*(.3+r()*.5);c.beginPath();c.ellipse(x,y,H*.012+r()*H*.012,H*.008,0,0,7);c.fill()}}
+  c.restore();
+}
+// Jagged alpine peaks: piecewise-linear ridges, lit/dark faces, snow caps. o.big = index of one dominant pyramid.
+function crags(c,Wt,base,hmin,hmax,r,o){
+  const K=Math.max(5,Math.round(Wt/(o.w||120))),Kw=Wt/K,vy=[],ap=[];
+  for(let k=0;k<=K;k++)vy.push(base-hmin*(.25+r()*.4));vy[K]=vy[0];
+  for(let k=0;k<K;k++){let hh=hmin+(hmax-hmin)*Math.pow(r(),.75);if(o.big===k)hh=hmax*1.3;ap.push([(k+.5)*Kw+(r()-.5)*Kw*.3,base-hh])}
+  const ridge=(x0,y0,x1,y1,n)=>{for(let j=1;j<=n;j++){const t=j/(n+1);c.lineTo(x0+(x1-x0)*t+(r()-.5)*Kw*.07,y0+(y1-y0)*t+(r()-.5)*H*.012)}c.lineTo(x1,y1)};
+  const path=()=>{c.beginPath();c.moveTo(0,H);c.lineTo(0,vy[0]);for(let k=0;k<K;k++){const a=ap[k];ridge(k*Kw,vy[k],a[0],a[1],4);ridge(a[0],a[1],(k+1)*Kw,vy[k+1],4)}c.lineTo(Wt,H);c.closePath()};
+  const st=r();const seed=()=>{let s=st*1e4|0;return()=>{s=(s*16807)%2147483647;return s/2147483647}};
+  const r0=r;path();c.fill();
+  c.save();path();c.clip();
+  if(o.snow){c.fillStyle=o.snow;for(let k=0;k<K;k++){const a=ap[k],sl=a[1]+(base-a[1])*(o.snowFrac||.34);
+      const xl=a[0]-(sl-a[1])*(a[0]-k*Kw)/Math.max(1,vy[k]-a[1]),xr=a[0]+(sl-a[1])*((k+1)*Kw-a[0])/Math.max(1,vy[k+1]-a[1]);
+      c.beginPath();c.moveTo(a[0],a[1]-2);c.lineTo(xr+4,sl);const n=5;for(let j=1;j<=n;j++){const t=j/(n+1);c.lineTo(xr+(xl-xr)*t,sl+(j%2?1:-.4)*H*.02*(.5+r0()))}c.lineTo(xl-4,sl);c.closePath();c.fill()}}
+  for(let k=0;k<K;k++){const a=ap[k];
+    c.fillStyle=o.dark;c.beginPath();c.moveTo(a[0],a[1]);c.lineTo((k+1)*Kw,vy[k+1]);c.lineTo(a[0]+Kw*.12,base+H*.05);c.closePath();c.fill();
+    c.fillStyle=o.lit;c.beginPath();c.moveTo(a[0],a[1]);c.lineTo(k*Kw,vy[k]);c.lineTo(a[0]-Kw*.08,base+H*.05);c.closePath();c.fill();
+    c.strokeStyle=o.dark;c.lineWidth=Math.max(.6,H*.002);for(let j=0;j<5;j++){c.globalAlpha=.3;c.beginPath();const t=.1+r()*.5,x=a[0]+(r()-.5)*Kw*.2;c.moveTo(x,a[1]+(base-a[1])*t);c.lineTo(x+(r()-.5)*10,a[1]+(base-a[1])*(t+.15+r()*.2));c.stroke()}c.globalAlpha=1}
+  c.restore();
+}
+// Houses stacked up a hillside (Prizren-style): lighter walls, dark terracotta roofs, a few lit windows.
+function hillTown(c,hy,cx,spread,depth,count,s,r,o){
+  const hs=[];for(let k=0;k<count;k++){const x=cx+(r()+r()-1)*spread;hs.push({x,y:hy(x)+7*s+Math.pow(r(),.9)*depth,q:0})}
+  hs.sort((a,b)=>a.y-b.y);const y0=hs.length?hs[0].y:0;
+  for(const h of hs){const dd=(h.y-y0)/(depth+1),sc=s*(.8+dd*.55)*(.9+r()*.3),w=(10+r()*8)*sc,hh=(6+r()*5)*sc,two=r()<.35;
+    c.fillStyle=o.wall;c.fillRect(h.x-w/2,h.y-hh,w,hh);if(two)c.fillRect(h.x-w*.32,h.y-hh-4*sc,w*.64,4*sc+1);
+    c.fillStyle=o.roof;c.beginPath();const ry=h.y-hh-(two?4*sc:0);
+    if(r()<.5){c.moveTo(h.x-w/2-1.4*sc,ry);c.lineTo(h.x-w*.25,ry-4.6*sc);c.lineTo(h.x+w*.25,ry-4.6*sc);c.lineTo(h.x+w/2+1.4*sc,ry)}else{c.moveTo(h.x-w/2-1.4*sc,ry);c.lineTo(h.x,ry-5.4*sc);c.lineTo(h.x+w/2+1.4*sc,ry)}
+    c.closePath();c.fill();
+    if(r()<.3){c.fillStyle=o.wall;c.fillRect(h.x+w*.2,ry-6.6*sc,1.4*sc,3.4*sc)}
+    const nw=w>12*sc?3:2;for(let k=0;k<nw;k++){c.fillStyle=o.lit&&r()<o.litP?o.lit:o.win;c.fillRect(h.x-w/2+(k+.55)*w/(nw+.1),h.y-hh*.78,1.5*sc,2.2*sc)}}
+}
+function cathedral(c,x,y,s){c.fillRect(x-9*s,y-10*s,18*s,16*s);c.beginPath();c.moveTo(x-10*s,y-10*s);c.lineTo(x,y-17*s);c.lineTo(x+10*s,y-10*s);c.fill();c.fillRect(x-2*s,y-46*s,4*s,38*s);c.beginPath();c.moveTo(x-2.6*s,y-46*s);c.lineTo(x,y-56*s);c.lineTo(x+2.6*s,y-46*s);c.fill();c.fillRect(x-.3*s,y-62*s,.6*s,7*s);c.fillRect(x-1.5*s,y-60*s,3*s,.6*s)}
+function stoneBridge(c,x,y,s){const w=64*s;c.fillRect(x-w/2,y-9*s,w,9*s+2);c.beginPath();c.moveTo(x-w/2-2,y-9*s);c.quadraticCurveTo(x,y-14*s,x+w/2+2,y-9*s);c.lineTo(x+w/2,y-8*s);c.lineTo(x-w/2,y-8*s);c.fill();
+  c.save();c.globalCompositeOperation='destination-out';for(let k=0;k<3;k++){c.beginPath();c.arc(x-w/3+k*w/3,y+1,w*.12,Math.PI,0);c.fill()}c.restore()}
+function stan(c,x,y,s,lit){c.fillRect(x-7*s,y-5*s,14*s,5*s+2);c.beginPath();c.moveTo(x-8.5*s,y-5*s);c.lineTo(x,y-11*s);c.lineTo(x+8.5*s,y-5*s);c.fill();c.save();c.fillStyle=lit;c.fillRect(x-1*s,y-4*s,2*s,2.4*s);c.restore();for(let k=0;k<4;k++){c.beginPath();c.ellipse(x+11*s+k*3.2*s,y-.8*s,1.5*s,1*s,0,0,7);c.fill()}}
+function hotel(c,x,y,s,lit){c.fillRect(x-24*s,y-12*s,48*s,12*s+2);[-16,0,16].forEach(dx=>{c.beginPath();c.moveTo(x+(dx-10)*s,y-12*s);c.lineTo(x+dx*s,y-21*s);c.lineTo(x+(dx+10)*s,y-12*s);c.fill()});c.save();c.fillStyle=lit;for(let k=0;k<8;k++)c.fillRect(x-21*s+k*5.6*s,y-8*s,1.6*s,2.2*s);c.restore()}
+function boulder(c,x,y,w,h,r){c.beginPath();c.moveTo(x-w,y+1);c.lineTo(x-w*.7,y-h*.7);c.lineTo(x-w*.2,y-h);c.lineTo(x+w*.4,y-h*.85);c.lineTo(x+w*.9,y-h*.3);c.lineTo(x+w,y+1);c.closePath();c.fill()}
+
 /* ================= parallax layers ================= */
 let layers=[];
 const LDEF=[{t:.14,f:.035,type:'mount',base:.5},{t:.3,f:.09,type:'hills',base:.55},{t:.46,f:.18,type:'pines',base:.6},{t:.62,f:.3,type:'mixed',base:.64},{t:.8,f:.5,type:'trunks',base:.7}];
@@ -278,30 +341,66 @@ function wrapDo(Wt,x,w,fn){fn(x);if(x-w<0)fn(x+Wt);if(x+w>Wt)fn(x-Wt)}
 function drawLayer(c,d,Wt,r,col){
   const s=H/400,b=d.base*H;
   if(d.type==='mount'){
-    const K=22,peaks=L.land==='peaks'||L.snow?1.45:1,hs=[];for(let k=0;k<K;k++)hs.push(H*(.07+r()*.17)*peaks*(k%3===0?1.3:1));
+    const night=L.tm==='night',lt=night?'rgba(200,220,255,.07)':'rgba(255,255,255,.13)',dk=night?'rgba(0,0,0,.24)':'rgba(0,0,0,.17)',L_=L.land;
+    if(L_==='rugova'||L_==='waterfall'){
+      // Rugova: sheer grey limestone walls up to ~1000 m; Mirusha: lower karst canyon walls with vegetation
+      const gg=L_==='rugova';rockWall(c,Wt,b+H*.04,H*.22,H*(gg?.52:.32),r,{step:gg?34:54,rough:H*(gg?.05:.02),pw:gg?.65:1,lit:gg?(night?'rgba(200,220,255,.1)':'rgba(255,255,255,.2)'):lt,dark:gg?(night?'rgba(0,0,0,.34)':'rgba(0,0,0,.3)'):dk,crack:'rgba(0,0,0,.5)',pines:gg?.8:1.5,pineCol:mix(col,'#000000',.3),cave:gg,shade:gg});
+    }else if(L_==='peaks'||L_==='ski'||L_==='fortress'||L.snow){
+      const peaky=L_==='peaks';
+      crags(c,Wt,b+H*.02,H*.1,H*(peaky?.46:.3),r,{w:peaky?110:150,big:LV===7?3:-1,snow:L_==='fortress'&&L.tm==='dusk'?mix(col,'#ffc9b0',.55):mix(col,'#ffffff',night?.22:.62),snowFrac:peaky?.42:.34,lit:lt,dark:dk});
+    }else{
+    const K=22,peaks=1,hs=[];for(let k=0;k<K;k++)hs.push(H*(.07+r()*.17)*peaks*(k%3===0?1.3:1));
     const ry=x=>{const f=x/Wt*K,i=Math.floor(f),t=f-i,a=hs[i%K],bb=hs[(i+1)%K],tt=(1-Math.cos(t*Math.PI))/2;return b-(a+(bb-a)*tt)-Math.abs(Math.sin(x*.05))*3*s};
-    c.beginPath();c.moveTo(0,H);for(let x=0;x<=Wt;x+=4)c.lineTo(x,ry(x));c.lineTo(Wt,H);c.closePath();c.fill();
-    if(L.snow||L.land==='peaks'){c.save();c.clip();c.fillStyle=mix(col,'#ffffff',L.tm==='night'?.18:.45);c.beginPath();c.moveTo(0,0);
-      for(let x=0;x<=Wt;x+=6)c.lineTo(x,b-H*.13*peaks+Math.sin(x*.07)*5*s+Math.sin(x*.023)*8*s);c.lineTo(Wt,0);c.fill();c.restore()}
+    c.beginPath();c.moveTo(0,H);for(let x=0;x<=Wt;x+=4)c.lineTo(x,ry(x));c.lineTo(Wt,H);c.closePath();c.fill();}
   }else if(d.type==='hills'){
-    const p1=r()*6.28,p2=r()*6.28;const hy=x=>b-H*(.035+.03*Math.sin(2*Math.PI*2*x/Wt+p1)+.018*Math.sin(2*Math.PI*5*x/Wt+p2));
-    c.beginPath();c.moveTo(0,H);for(let x=0;x<=Wt;x+=4)c.lineTo(x,hy(x));c.lineTo(Wt,H);c.fill();
-    const win=mix(col,L.fog,.6),lit=L.tm==='night'||L.tm==='eve'||L.tm==='dusk'?'#f3c26b':win;
-    for(let x=0;x<Wt;x+=4+r()*10){const h=H*(.012+r()*.022);pine(c,x,hy(x)+2,h,h*.45,r)}
-    const L_=L.land,at=f=>{const x=Wt*f;return[x,hy(x)+2*s]};
-    if(L_==='prishtina'){let[x,y]=at(.22);blocks(c,x,y,s,r,lit);[x,y]=at(.33);library(c,x,y,s);[x,y]=at(.4);rtkTower(c,x,y,s);[x,y]=at(.46);mosque(c,x,y,s);[x,y]=at(.72);blocks(c,x,y,s,r,lit);[x,y]=at(.85);church(c,x,y,s)}
-    else if(L_==='waterfall'){let[x,y]=at(.4);waterfall(c,x,y,s*1.3,col);[x,y]=at(.7);house(c,x,y,s);[x,y]=at(.75);house(c,x,y,s);[x,y]=at(.8);mullar(c,x,y,s);[x,y]=at(.88);mosque(c,x,y,s)}
-    else if(L_==='kulla'){[.12,.3,.38,.6,.78,.9].forEach((f,k)=>{const[x,y]=at(f);kulla(c,x,y,s*(1+r()*.3),lit)});[.2,.5,.68].forEach(f=>{const[x,y]=at(f);mullar(c,x,y,s)})}
-    else if(L_==='fortress'){let best=0,bx=0;for(let x=Wt*.2;x<Wt*.6;x+=5){const v=-hy(x);if(v>best||!bx){best=v;bx=x}}
-      fortress(c,bx,hy(bx)+2*s,s*1.2);[.68,.75,.82].forEach((f,k)=>{const[x,y]=at(f);k===1?mosque(c,x,y,s*1.1):minaret(c,x,y,s)});[.86,.9,.95].forEach(f=>{const[x,y]=at(f);house(c,x,y,s)})}
-    else if(L_==='ski'){const[x0,y0]=at(.12),x1=Wt*.62;skiLift(c,x0,y0,x1,hy(x1)-H*.08,s);[.08,.16,.7].forEach(f=>{const[x,y]=at(f);house(c,x,y,s)})}
-    else if(L_==='village'){[.15,.2,.27].forEach(f=>{const[x,y]=at(f);house(c,x,y,s)});let[x,y]=at(.35);mosque(c,x,y,s);[.45,.52,.58,.82].forEach(f=>{const[x,y]=at(f);mullar(c,x,y,s)});[x,y]=at(.7);kulla(c,x,y,s,lit);[x,y]=at(.9);church(c,x,y,s)}
+    const p1=r()*6.28,p2=r()*6.28,L_=L.land,night=L.tm==='night';
+    const mound=L_==='fortress'?(x=>H*.27*Math.exp(-Math.pow((x-Wt*.4)/(Wt*.12),2))):L_==='ski'?(x=>H*.1*Math.exp(-Math.pow((x-Wt*.65)/(Wt*.2),2))):()=>0;
+    const hy=x=>b-H*(.035+.03*Math.sin(2*Math.PI*2*x/Wt+p1)+.018*Math.sin(2*Math.PI*5*x/Wt+p2))-mound(x);
+    const lt=night?'rgba(200,220,255,.07)':'rgba(255,255,255,.13)',dk=night?'rgba(0,0,0,.24)':'rgba(0,0,0,.17)';
+    const litc=L.tm==='night'||L.tm==='eve'||L.tm==='dusk'?'#f3c26b':null,win=mix(col,L.fog,.6),lit=litc||win;
+    const at=f=>{const x=Wt*f;return[x,hy(x)+2*s]};
+    const dark=(fn)=>{c.save();c.fillStyle=mix(col,'#000000',.4);fn();c.restore()};
+    if(L_==='rugova'){
+      rockWall(c,Wt,b+H*.05,H*.07,H*.25,r,{step:28,rough:H*.03,pw:1,lit:lt,dark:dk,crack:'rgba(0,0,0,.4)',pines:2,pineCol:mix(col,'#000000',.38)});
+    }else{
+      c.beginPath();c.moveTo(0,H);for(let x=0;x<=Wt;x+=4)c.lineTo(x,hy(x));c.lineTo(Wt,H);c.fill();
+      for(let x=0;x<Wt;x+=4+r()*10){if(L_==='fortress'&&x>Wt*.2&&x<Wt*.62){r();continue}const h=H*(.012+r()*.022);pine(c,x,hy(x)+2,h,h*.45,r)}
+    }
+    if(L_==='prishtina'){let[x,y]=at(.22);blocks(c,x,y,s,r,lit);[x,y]=at(.33);library(c,x,y,s);[x,y]=at(.4);rtkTower(c,x,y,s);[x,y]=at(.46);mosque(c,x,y,s);[x,y]=at(.56);cathedral(c,x,y,s);[x,y]=at(.72);blocks(c,x,y,s,r,lit);[x,y]=at(.85);church(c,x,y,s)}
+    else if(L_==='waterfall'){[[.1,1.1],[.36,1.6],[.6,1.2]].forEach(([f,k])=>{const[x,y]=at(f);waterfall(c,x,y,s*k,col)});let[x,y]=at(.78);house(c,x,y,s);[x,y]=at(.83);house(c,x,y,s);[x,y]=at(.88);mullar(c,x,y,s);[x,y]=at(.94);mosque(c,x,y,s)}
+    else if(L_==='rugova'){const gy=b-H*.02;[.1,.28,.4,.58,.74,.9].forEach(f=>{dark(()=>kulla(c,Wt*f,gy,s*(1.1+r()*.3),lit))});[.2,.5,.68].forEach(f=>dark(()=>mullar(c,Wt*f,gy,s)))}
+    else if(L_==='fortress'){
+      // Prizren: Kalaja fortress on the crag, the old town climbing the slope below it (Nenkalaja), mosques and the Stone Bridge over the Lumbardhi
+      const wall=mix(col,L.tm==='dusk'?'#ffe2c0':L.fog,.5),roof=mix(col,'#7a2a14',.62);
+      hillTown(c,hy,Wt*.4,Wt*.15,H*.24,140,s*1.35,r,{wall,roof,win:mix(col,'#000000',.4),lit:litc,litP:.55});
+      let best=0,bx=0;for(let x=Wt*.3;x<Wt*.5;x+=3){const v=-hy(x);if(v>best||!bx){best=v;bx=x}}
+      fortress(c,bx,hy(bx)+3*s,s*1.25);
+      dark(()=>{let[x,y]=at(.545);mosque(c,x,y,s*1.15);[x,y]=at(.3);minaret(c,x,y,s);[x,y]=at(.585);minaret(c,x,y,s*.9);[x,y]=at(.27);church(c,x,y,s*.9);[x,y]=at(.63);stoneBridge(c,x,y+2*s,s*1.1)});
+      c.save();c.fillStyle=rgba(mix(L.fog,'#ffffff',.3),.35);c.fillRect(Wt*.585,hy(Wt*.63)+1,Wt*.1,2*s);c.restore();
+      [.78,.85,.92].forEach(f=>{const[x,y]=at(f);house(c,x,y,s)})}
+    else if(L_==='ski'){
+      c.save();c.beginPath();c.moveTo(0,H);for(let x=0;x<=Wt;x+=4)c.lineTo(x,hy(x));c.lineTo(Wt,H);c.clip();c.strokeStyle=mix(col,'#ffffff',night?.2:.55);c.lineCap='round';
+      for(let j=0;j<5;j++){const x0=Wt*(.52+j*.055)+r()*20;c.globalAlpha=.55;c.lineWidth=H*(.01+r()*.01);c.beginPath();c.moveTo(x0,hy(x0)+4);c.bezierCurveTo(x0+30*s,b-H*.12,x0-24*s,b-H*.06,x0+r()*60*s-20*s,b+H*.02);c.stroke()}c.restore();
+      const[x0,y0]=at(.14),x1=Wt*.66;skiLift(c,x0,y0,x1,hy(x1)-H*.04,s);
+      dark(()=>{let[x,y]=at(.3);hotel(c,x,y,s*.9,lit);[x,y]=at(.08);house(c,x,y,s);[x,y]=at(.21);house(c,x,y,s);[x,y]=at(.78);house(c,x,y,s);[x,y]=at(.86);house(c,x,y,s)})}
+    else if(L_==='village'){
+      // Drenica: rolling farmland, scattered stone houses, kullas, mosque, haystacks
+      c.save();c.beginPath();c.moveTo(0,H);for(let x=0;x<=Wt;x+=4)c.lineTo(x,hy(x));c.lineTo(Wt,H);c.clip();
+      for(let j=0;j<22;j++){const x=r()*Wt,w=Wt*(.02+r()*.05);c.fillStyle=r()<.5?'rgba(255,255,255,.07)':'rgba(0,0,0,.1)';c.beginPath();c.moveTo(x,hy(x)-4);c.lineTo(x+w,hy(x+w)-4);c.lineTo(x+w-w*.4,b+H*.06);c.lineTo(x-w*.4,b+H*.06);c.fill()}c.restore();
+      const wall=mix(col,L.fog,.45),roof=mix(col,'#4a2418',.45);
+      hillTown(c,hy,Wt*.3,Wt*.1,H*.05,22,s*.85,r,{wall,roof,win:mix(col,'#000000',.35),lit:litc,litP:.5});
+      dark(()=>{let[x,y]=at(.42);mosque(c,x,y,s);[x,y]=at(.7);kulla(c,x,y,s,lit);[x,y]=at(.9);minaret(c,x,y,s*.9);[.52,.58,.82].forEach(f=>{const[xx,yy]=at(f);mullar(c,xx,yy,s)})})}
+    else if(L_==='peaks'){
+      const wall=mix(col,L.fog,.3),roof=mix(col,'#000000',.3);
+      dark(()=>{[.18,.52,.8].forEach(f=>{const[x,y]=at(f);stan(c,x,y,s,lit)})})}
   }else if(d.type==='pines'){
     c.fillRect(0,b,Wt,H-b);
-    for(let x=0;x<Wt;x+=5+r()*11){const h=H*(.05+r()*.09),w=h*.42;const yy=b+r()*4*s;wrapDo(Wt,x,w,px=>pine(c,px,yy,h,w,mulberry(x|0)))}
+    const sp=L.land==='fortress'?1.8:1;
+    for(let x=0;x<Wt;x+=(5+r()*11)*sp){const h=H*(.05+r()*.09),w=h*.42;const yy=b+r()*4*s;wrapDo(Wt,x,w,px=>pine(c,px,yy,h,w,mulberry(x|0)))}
   }else if(d.type==='mixed'){
     c.fillRect(0,b,Wt,H-b);
-    for(let x=0;x<Wt;x+=22+r()*40){const h=H*(.13+r()*.2),yy=b+r()*5*s;const lf=!L.snow&&r()<.4;const w=lf?h*.6:h*.38,seed=x|0;
+    const sp=L.land==='fortress'?2.2:1;
+    for(let x=0;x<Wt;x+=(22+r()*40)*sp){const h=H*(.13+r()*.2),yy=b+r()*5*s;const lf=!L.snow&&r()<.4;const w=lf?h*.6:h*.38,seed=x|0;
       wrapDo(Wt,x,w,px=>lf?leafy(c,px,yy,h,w,mulberry(seed)):pine(c,px,yy,h,w,mulberry(seed)))}
   }else if(d.type==='trunks'){
     c.fillRect(0,b,Wt,H-b);
@@ -319,10 +418,11 @@ function drawLayer(c,d,Wt,r,col){
 /* ================= world decor ================= */
 let decor=[];
 function buildDecor(){
-  decor=[];const r=mulberry(LV*733+3);const rural=['kulla','village','waterfall','fortress'].includes(L.land);
+  decor=[];const r=mulberry(LV*733+3);const rural=['rugova','village','waterfall','fortress'].includes(L.land),rocky=['rugova','waterfall','peaks'].includes(L.land);
   for(let x=-200;x<T.finish+900;x+=50+r()*170){
     if(T.pits.some(p=>x>p.x0-40&&x<p.x1+40))continue;
     const k=r();let type='pine';if(!L.snow&&k<.25)type='leafy';else if(rural&&k<.33)type='mullar';else if(k<.4)type='bush';
+    if(rocky&&k>.8)type='rock';
     decor.push({x,type,h:type==='pine'?70+r()*110:type==='leafy'?60+r()*70:type==='mullar'?1.6+r()*.4:10+r()*12,seed:(r()*1e6)|0});
   }
 }
@@ -488,7 +588,7 @@ function render(t,dt){
   const x0=cam.x-W*.5/ZOOM-40,x1=cam.x+W*.5/ZOOM+40,bot=cam.y+H*.5/ZOOM+60;
   const nearC=mix(L.fog,L.gr,.88);g.fillStyle=nearC;g.strokeStyle=nearC;
   for(const d of decor){if(d.x<x0-80||d.x>x1+80)continue;const y=Hx(d.x)+6,r=mulberry(d.seed);
-    if(d.type==='pine')pine(g,d.x,y,d.h,d.h*.38,r);else if(d.type==='leafy')leafy(g,d.x,y,d.h,d.h*.65,r);else if(d.type==='mullar')mullar(g,d.x,y-2,d.h*1.5);else{g.beginPath();g.ellipse(d.x,y-2,d.h*1.4,d.h*.8,0,Math.PI,0);g.fill()}}
+    if(d.type==='pine')pine(g,d.x,y,d.h,d.h*.38,r);else if(d.type==='leafy')leafy(g,d.x,y,d.h,d.h*.65,r);else if(d.type==='mullar')mullar(g,d.x,y-2,d.h*1.5);else if(d.type==='rock')boulder(g,d.x,y,d.h*.9,d.h*.75,r);else{g.beginPath();g.ellipse(d.x,y-2,d.h*1.4,d.h*.8,0,Math.PI,0);g.fill()}}
   // terrain
   const i0=Math.max(0,Math.floor(x0/SEG)),i1=Math.min(T.N-1,Math.ceil(x1/SEG));
   g.fillStyle=L.gr;g.beginPath();g.moveTo(i0*SEG,bot+800);for(let i=i0;i<=i1;i++)g.lineTo(i*SEG,T.h[i]);g.lineTo(i1*SEG,bot+800);g.fill();

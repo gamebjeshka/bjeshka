@@ -20,8 +20,10 @@ app/src/main/java/al/bjeshka/game/MainActivity.kt   full-screen WebView, WebView
 app/src/main/assets/game/index.html                  THE GAME (≈900 lines, sections marked /* ===== name ===== */)
 app/src/main/assets/game/sounds/*.mp3                real nature recordings (see sounds/CREDITS.md)
 app/src/main/res/drawable/ic_launcher_*.xml          adaptive icon (vector): rider in front of dusk mountains
-tools/test_levels.py      bot plays all 10 levels headless – run after ANY physics/terrain change; all must finish
-tools/screenshots.py      menu + every level → tools/shots/
+tools/test_levels.js      node+playwright: bot plays all 10 levels headless. `full` bot (pedal+lean+brake) must FINISH, `pedal`-only bot must NOT.
+                          Run after ANY physics/terrain change:  NODE_PATH=$(npm root -g) node tools/test_levels.js
+tools/drop_test.js        landing feel: drops the bike from 20-320 px, prints suspension travel used and peak load in g
+tools/screenshots.js      every level at several camera positions → tools/shots/  (node tools/screenshots.js [lv] [camX,camX])
 tools/build_sounds.py     rebuild sounds/ from the Moodist repo
 ```
 No `gradlew` or wrapper jar is committed; CI uses `gradle/actions/setup-gradle` with Gradle 8.13. To add the wrapper locally, run
@@ -58,19 +60,25 @@ No `gradlew` or wrapper jar is committed; CI uses `gradle/actions/setup-gradle` 
   10. Rugova natën – night storm
 - **terrain**: `genTerrain(n)` is seeded and deterministic per level. Features: rolling hills, kickers (the ramp lip angle is capped at about 34°,
   `lr = hr*3`), pits/gaps from level 4 (width `56+d*42+rng*14`; must stay jumpable at MAXV), step-ups, rock gardens
-  (smooth `sin²` bumps ≤ 8 px), steep descents. Also produces checkpoints `cps` every 1400 px, kept at least 650 px before a pit, and `finish`.
+  (smooth `sin²` bumps ≤ 8 px), steep descents. Levels are **2x** the original length (`len=(9000+n*1500)*2`).
+  - **Control hazards** (`haz[]`): every ~2300-3800 px a steep plunge (>=52 deg, 170-260 px long) or from level 3 a drop-off cliff (210-320 px). Pedalling alone crashes on both;
+    the player must lean back (and may brake). Each is followed by a gentle climb that recovers ~75% of the height. The owner asked that no level can be finished by holding only the pedal button.
+    Checkpoints are kept out of hazard zones. Also produces checkpoints `cps` every 1400 px, kept at least 650 px before a pit, and `finish`.
   - Past bugs that were fixed: pits were 1200 px deep because the second `seg()` call was relative; 60° ramps stalled the bike;
     sharp rocks trapped the wheel.
 - **physics**: three Verlet points: rear wheel, front wheel, rider/frame mass `H` (im 1.15/1.15/0.9).
   - The wheelbase is rigid.
-  - The rider hangs on **two spring-dampers** (rear shock and fork): `SK=650, SC=32, STRAVEL=5, SEXT=3`.
-    This gives about 15–20% sag at rest and up to about 85% travel on big drops. The owner explicitly wanted landings that absorb, "not like a rock".
+  - The rider hangs on **two spring-dampers** (rear shock and fork): `SK=170, SCC=11 (compression), SCR=24 (rebound), STRAVEL=22, SEXT=4, SPROG=5` (progressive spring = soft bump-stop).
+    A 1.5 m drop uses ~65% travel at ~5 g (it used to bottom out at 18 g, "like a rock"). Landing feedback in `landFx()`: camera dip, dust, softer thud; the rider crouches deeper with compression (`comp`). Check with `tools/drop_test.js`.
   - Drive and brakes act on the **whole bike** (`dv` applied to all points along the ground tangent), not only the tyre. Previously, mass ratios made the bike sluggish.
   - Aerodynamic drag: `b.drag`.
   - Lean torque is applied around the centroid: 16 rad/s² in the air, 9 on the ground.
   - Crash when the head point touches the ground, falls into a pit, or drops far below the terrain. Respawn at the last checkpoint after 1.4 s.
   - Holding brake at a standstill rolls the bike backwards, to get unstuck.
   - Flips are counted from accumulated air rotation (toast "Salto!").
+- **scenery** (real places, researched): `rockWall` (Rugova gorge: sheer grey limestone walls, ledge pines, caves; Mirusha canyon), `crags` (jagged snow-capped alpine peaks; Gjeravica has one dominant pyramid),
+  `hillTown` (Prizren: Kalaja fortress on a crag, Nenkalaja old town of white houses with terracotta roofs climbing the slope, minarets, Sinan Pasha-style mosque, Stone Bridge, Sharr peaks behind),
+  Brezovica ski trails + lift + hotel, Drenica farmland patchwork + stone houses + kullas, Prishtina skyline with the Mother Teresa cathedral, stan huts in the Bjeshket e Nemuna. Level 3 and 10 use `land:'rugova'`.
 - **rendering**:
   - Sky with sun, moon and stars, clouds, lightning bolt.
   - Five parallax layers pre-rendered to tile canvases (`buildLayers`): mountains with snow caps, hills with landmarks, pines, mixed forest,
@@ -103,7 +111,7 @@ No `gradlew` or wrapper jar is committed; CI uses `gradle/actions/setup-gradle` 
 
 ## Conventions / gotchas
 - Edit the game only in `app/src/main/assets/game/index.html`. Keep it a single file with inline CSS and JS.
-- After changing physics or terrain, run `python tools/test_levels.py`. All 10 levels must print `done: True`.
+- After changing physics or terrain, run `node tools/test_levels.js` (needs `npm i -g playwright`). Every line must print OK: the full bot finishes all 10 levels with 0 crashes and the pedal-only bot never finishes.
 - Wrap `localStorage` in try/catch, because it can throw.
 - Everything is tuned for phone landscape (844×390). `ZOOM = min(H/250, W/430)`.
 - Sound licences: Pixabay Content License or CC0, via Moodist. Keep `sounds/CREDITS.md` and the credit line in the menu.
